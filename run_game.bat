@@ -1,0 +1,6 @@
+@echo off
+echo Activating Sokoban virtual environment...
+call sokoban-venv\Scripts\activate.bat
+echo Running Sokoban Game...
+python main.py
+pause
