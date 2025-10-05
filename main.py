@@ -79,7 +79,7 @@ class SokobanGame:
             
             # Load box sprites
             self.box = pygame.image.load(os.path.join(assets_path, "Crates", "crate_01.png"))
-            self.box_docked = pygame.image.load(os.path.join(assets_path, "Crates", "crate_03.png"))
+            self.box_docked = pygame.image.load(os.path.join(assets_path, "Crates", "crate_05.png"))
             
             # Scale images to tile size
             self.worker = pygame.transform.scale(self.worker, (TILE_SIZE, TILE_SIZE))
