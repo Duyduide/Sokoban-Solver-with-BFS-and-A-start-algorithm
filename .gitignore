@@ -49,6 +49,9 @@ Thumbs.db
 *.log
 *.tmp
 
+# Kenney Asset Pack (too large for repo)
+kenney_sokobanPack/
+
 # Jupyter Notebook
 .ipynb_checkpoints
 
