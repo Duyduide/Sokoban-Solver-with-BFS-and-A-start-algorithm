@@ -17,9 +17,9 @@ from copy import deepcopy
 pygame.init()
 
 # Constants
-WINDOW_WIDTH = 800
-WINDOW_HEIGHT = 600
-TILE_SIZE = 32
+WINDOW_WIDTH = 1200
+WINDOW_HEIGHT = 800
+TILE_SIZE = 48
 FPS = 60
 
 # Colors
@@ -36,7 +36,7 @@ class SokobanGame:
         self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
         pygame.display.set_caption("Sokoban - BFS vs A* Algorithm Visualization")
         self.clock = pygame.time.Clock()
-        self.font = pygame.font.Font(None, 24)
+        self.font = pygame.font.Font(None, 28)
         
         # Load assets
         self.load_assets()
@@ -274,6 +274,94 @@ class SokobanGame:
         return ''.join(''.join(row) for row in matrix)
     
     # =======================
+    # DEADLOCK DETECTION
+    # =======================
+    def is_deadlock(self, matrix):
+        """
+        Kiểm tra xem trạng thái hiện tại có bị deadlock không
+        Returns True nếu bị deadlock (không thể giải được)
+        """
+        boxes = self.get_boxes(matrix)
+        
+        for box_pos in boxes:
+            if self.is_box_deadlock(matrix, box_pos):
+                return True
+        
+        return False
+    
+    def get_boxes(self, matrix):
+        """Lấy danh sách vị trí của tất cả các box chưa vào dock"""
+        boxes = []
+        for y, row in enumerate(matrix):
+            for x, cell in enumerate(row):
+                if cell == '$':  # Box chưa vào dock
+                    boxes.append((x, y))
+        return boxes
+    
+    def get_docks(self, matrix):
+        """Lấy danh sách vị trí của tất cả các dock"""
+        docks = []
+        for y, row in enumerate(matrix):
+            for x, cell in enumerate(row):
+                if cell in ['.', '+', '*']:  # Dock (trống, có player, có box)
+                    docks.append((x, y))
+        return docks
+    
+    def is_box_deadlock(self, matrix, box_pos):
+        """Kiểm tra một box cụ thể có bị deadlock không"""
+        x, y = box_pos
+        
+        # Corner Deadlock - Box bị kẹt ở góc
+        if self.is_corner_deadlock(matrix, box_pos):
+            return True
+        
+        # Có thể thêm các loại deadlock khác ở đây (ví dụ: wall deadlock, room deadlock, ...)
+        
+        return False
+    
+    def is_corner_deadlock(self, matrix, box_pos):
+        """
+        Kiểm tra Corner Deadlock
+        Box bị kẹt ở góc tường và không phải là dock
+        """
+        x, y = box_pos
+        
+        # Nếu box đã ở dock thì không phải deadlock
+        if matrix[y][x] == '*':
+            return False
+        
+        # Kiểm tra 4 góc có thể
+        corners = [
+            # Top-left corner
+            (matrix[y-1][x] == '#' and matrix[y][x-1] == '#'),
+            # Top-right corner  
+            (matrix[y-1][x] == '#' and matrix[y][x+1] == '#'),
+            # Bottom-left corner
+            (matrix[y+1][x] == '#' and matrix[y][x-1] == '#'),
+            # Bottom-right corner
+            (matrix[y+1][x] == '#' and matrix[y][x+1] == '#')
+        ]
+        
+        return any(corners)
+
+    
+    def detect_all_deadlocks(self, matrix):
+        """
+        Phát hiện tất cả các deadlock trong trạng thái hiện tại
+        Trả về danh sách các deadlock được tìm thấy
+        """
+        deadlocks = []
+        boxes = self.get_boxes(matrix)
+        
+        for box_pos in boxes:
+            x, y = box_pos
+            
+            if self.is_corner_deadlock(matrix, box_pos):
+                deadlocks.append(f"Corner deadlock at ({x}, {y})")
+        
+        return deadlocks
+    
+    # =======================
     # BFS ALGORITHM TEMPLATE
     # =======================
     def solve_bfs(self):
@@ -364,7 +452,7 @@ class SokobanGame:
     def display_statistics(self):
         """Hiển thị thống kê so sánh giữa BFS và A*"""
         y_offset = 10
-        stats_surface = pygame.Surface((300, 200))
+        stats_surface = pygame.Surface((350, 350))
         stats_surface.fill(WHITE)
         stats_surface.set_alpha(230)
         
@@ -414,7 +502,7 @@ class SokobanGame:
         astar_length = self.font.render(f"Solution: {self.astar_stats['solution_length']}", True, BLACK)
         stats_surface.blit(astar_length, (20, y_offset))
         
-        self.screen.blit(stats_surface, (WINDOW_WIDTH - 310, 10))
+        self.screen.blit(stats_surface, (WINDOW_WIDTH - 360, 10))
     
     def display_ui_info(self):
         """Hiển thị thông tin điều khiển và level"""
@@ -427,14 +515,39 @@ class SokobanGame:
             "P: Previous Level",
             "1: Run BFS",
             "2: Run A*",
+            "D: Check Deadlocks",
             "ESC: Quit"
         ]
         
-        y_offset = WINDOW_HEIGHT - 200
+        y_offset = WINDOW_HEIGHT - 240
         for text in info_texts:
             text_surface = self.font.render(text, True, WHITE)
             self.screen.blit(text_surface, (10, y_offset))
             y_offset += 20
+    
+    def display_deadlock_info(self):
+        """Hiển thị thông tin deadlock nếu có"""
+        deadlocks = self.detect_all_deadlocks(self.game_matrix)
+        
+        if deadlocks:
+            # Tạo surface cho deadlock warning
+            warning_surface = pygame.Surface((450, min(180, 35 + len(deadlocks) * 25)))
+            warning_surface.fill((255, 200, 200))  # Light red background
+            warning_surface.set_alpha(230)
+            
+            # Tiêu đề warning
+            warning_title = self.font.render("⚠️ DEADLOCK DETECTED!", True, (150, 0, 0))
+            warning_surface.blit(warning_title, (10, 5))
+            
+            # Liệt kê các deadlock
+            y_offset = 30
+            for deadlock in deadlocks[:5]:  # Chỉ hiển thị tối đa 5 deadlock
+                deadlock_text = self.font.render(f"• {deadlock}", True, (100, 0, 0))
+                warning_surface.blit(deadlock_text, (15, y_offset))
+                y_offset += 25
+            
+            # Hiển thị ở góc trên bên trái
+            self.screen.blit(warning_surface, (10, 10))
     
     def handle_input(self, event):
         """Xử lý input từ người dùng"""
@@ -469,6 +582,23 @@ class SokobanGame:
                 if solution:
                     self.solution_path = solution
                     self.solution_index = 0
+            
+            elif event.key == pygame.K_d:
+                # Check deadlocks
+                deadlocks = self.detect_all_deadlocks(self.game_matrix)
+                if deadlocks:
+                    print("🚫 DEADLOCK DETECTED:")
+                    for deadlock in deadlocks:
+                        print(f"  • {deadlock}")
+                    print(f"Total deadlocks found: {len(deadlocks)}")
+                else:
+                    print("✅ No deadlocks detected in current state")
+                    
+                # Check if current state is completely deadlocked
+                if self.is_deadlock(self.game_matrix):
+                    print("💀 This state is UNSOLVABLE!")
+                else:
+                    print("🎯 State is still solvable")
             
             # Movement keys (for manual play)
             elif event.key in [pygame.K_UP, pygame.K_w]:
@@ -514,6 +644,7 @@ class SokobanGame:
             # Draw UI
             self.display_ui_info()
             self.display_statistics()
+            self.display_deadlock_info()
             
             # Update display
             pygame.display.flip()

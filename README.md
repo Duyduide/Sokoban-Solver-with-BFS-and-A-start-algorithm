@@ -52,3 +52,15 @@ python main.py
 - ESC: Thoát game
 - 1: Chạy thuật toán BFS
 - 2: Chạy thuật toán A*
+
+## Game State
+- `matrix`: Ma trận 2D biểu diễn trạng thái game
+- `player_pos`: Tuple (x, y) vị trí người chơi
+- Các ký tự trong matrix:
+  - `' '`: Sàn trống
+  - `'#'`: Tường
+  - `'@'`: Người chơi trên sàn
+  - `'+'`: Người chơi trên dock
+  - `'$'`: Hộp trên sàn
+  - `'*'`: Hộp trên dock
+  - `'.'`: Dock (vị trí đích)
