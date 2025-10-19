@@ -452,6 +452,11 @@ class SokobanGame:
             # Apply move from solution
             move = self.solution_path[self.solution_index]
             
+            # Print current matrix state
+            print(f"\n🎮 Current matrix state (Step {self.solution_index + 1}/{len(self.solution_path)}):")
+            for row in self.game_matrix:
+                print(''.join(row))
+            
             # Debug info
             print(f"📍 Executing step {self.solution_index + 1}/{len(self.solution_path)}: {move}")
             print(f"   Current pos: {self.player_pos}")
@@ -564,7 +569,7 @@ class SokobanGame:
         print("🌟 Start Solver using A*...")
         start_time = time.time()
         process = psutil.Process(os.getpid())
-        start_memory = process.memory_info().rss / 1024 / 1024  # MB
+        start_memory = process.memory_info().rss / (1024 * 1024)  # MB
         
         # Khởi tạo
         initial_state = (self.matrix_to_string(self.game_matrix), self.player_pos)
@@ -603,7 +608,7 @@ class SokobanGame:
                 
                 # Tính toán thống kê
                 end_time = time.time()
-                end_memory = process.memory_info().rss / 1024 / 1024  # MB
+                end_memory = process.memory_info().rss / (1024 * 1024)  # MB
                 
                 self.astar_stats = {
                     "time": end_time - start_time,
@@ -671,7 +676,7 @@ class SokobanGame:
         
         # Tính toán thống kê
         end_time = time.time()
-        end_memory = process.memory_info().rss / 1024 / 1024  # MB
+        end_memory = process.memory_info().rss / (1024 * 1024)  # MB
         
         self.astar_stats = {
             "time": end_time - start_time,
