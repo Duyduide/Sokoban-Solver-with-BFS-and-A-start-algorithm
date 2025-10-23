@@ -25,7 +25,7 @@ File `main.py` đã được khởi tạo với đầy đủ framework cần thi
 
 ## 1. Implement BFS (Breadth-First Search)
 
-### Location: Hàm `solve_bfs()` tại dòng 227
+### Location: Hàm `solve_bfs()` tại dòng 367
 
 ### Pseudocode:
 ```python

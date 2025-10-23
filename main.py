@@ -2,6 +2,8 @@
 Sokoban Game với BFS và A* Search Algorithms
 CO3061 Nhập môn AI - Trường Đại học Bách Khoa TP.HCM
 """
+from openpyxl import Workbook, load_workbook
+
 
 import pygame
 import sys
@@ -50,7 +52,7 @@ class SokobanGame:
         self.algorithm_running = False
         self.solution_path = []
         self.solution_index = 0
-        
+        self.auto_play = False
         # Statistics
         self.bfs_stats = {"time": 0, "memory": 0, "nodes": 0, "solution_length": 0}
         self.astar_stats = {"time": 0, "memory": 0, "nodes": 0, "solution_length": 0}
@@ -231,7 +233,7 @@ class SokobanGame:
     
     def apply_move(self, matrix, player_pos, move):
         """Áp dụng một nước đi và trả về matrix mới cùng vị trí player mới"""
-        new_matrix = deepcopy(matrix)
+        new_matrix = [row[:] for row in matrix]
         px, py = player_pos
         dx, dy = move
         new_x, new_y = px + dx, py + dy
@@ -369,22 +371,57 @@ class SokobanGame:
         Template cho thuật toán Breadth-First Search
         TODO: Hiện thực giải thuật BFS
         """
+        # phần chuẩn bị thông số để đo thời gian và bộ nhớ 
         print("🔍 Start Solver using BFS...")
-        start_time = time.time()
-        process = psutil.Process(os.getpid())
+        start_time = time.time() # thời điểm bắt đầu
+        #lấy thông tin tiến trình hiện tại  
+        process = psutil.Process(os.getpid()) 
+        #chuyển đổi sang MB
         start_memory = process.memory_info().rss / 1024 / 1024  # MB
         
         # TODO: Implement BFS logic here
         # Hint: Sử dụng queue (deque) để lưu trữ các trạng thái giống hồi học DSA á =))))
         # Cần track: current_matrix, player_position, path_to_reach_this_state
-        
+
         # Placeholder implementation
         nodes_explored = 0
         solution_found = False
         solution_path = []
-        
+
+        visited = set()
+        queue = deque()
+        player_pos = self.player_pos #lấy thông tin vị trí người chơi hiện tại
+        matrix = deepcopy(self.game_matrix) #bản đồ hiện tại
+        matrix_key = self.matrix_to_string(matrix) # biến ma trận thành chuỗi 
+        queue.append((matrix, player_pos, []))
+        visited.add((matrix_key, player_pos))
+
+        while queue:
+            nodes_explored += 1 # tăng bộ đếm
+            current_matrix, current_player_pos, path = queue.popleft() # lấy phần tử đầu tiên của queue
+            if self.is_level_completed(current_matrix): # nếu level đã hoàn thành thì break
+                solution_found = True
+                solution_path = path
+                break
+            #kiểm tra deadlock
+            deadlock = self.detect_all_deadlocks(current_matrix)
+            if not deadlock:                
+                # danh sách các hướng đi khả thi của player
+                valid_move = self.get_valid_moves(current_matrix, current_player_pos) 
+                #lặp qua từng hướng để thử mở rộng
+                for direction in valid_move:
+                    #Áp dụng bước đi
+                    new_current_matrix, new_current_player_pos = self.apply_move(current_matrix, current_player_pos, direction)
+                    new_matrix_key = self.matrix_to_string(new_current_matrix)
+                    # tránh lặp trạng thái đã visited nếu chưa có thì thêm vào visited
+                    if (new_matrix_key, new_current_player_pos) not in visited:
+                        visited.add((new_matrix_key, new_current_player_pos))
+                        new_path = path + [direction]
+                        queue.append((new_current_matrix, new_current_player_pos, new_path))
+                    
         # Tính toán thống kê
-        end_time = time.time()
+        # ghi lại thời gian kết thúc và bộ nhớ chiếm dụng (MB)
+        end_time = time.time() 
         end_memory = process.memory_info().rss / 1024 / 1024  # MB
         
         self.bfs_stats = {
@@ -393,12 +430,19 @@ class SokobanGame:
             "nodes": nodes_explored,
             "solution_length": len(solution_path)
         }
-        
+        # phần ghi lại thông số về thời gian, bộ nhớ sử dụng, độ dài các bước,...
         print(f"✅ BFS Completed in {self.bfs_stats['time']:.3f}s")
         print(f"📊 Nodes explored: {self.bfs_stats['nodes']}")
-        print(f"💾 Memory used: {self.bfs_stats['memory']:.2f} MB")
+        print(f"💾 Memory used: {self.bfs_stats['memory']:.4f} MB")
         print(f"📏 Solution length: {self.bfs_stats['solution_length']}")
-        
+        if solution_found:
+            print("🧭 Solution Path:")
+            for step in solution_path:
+                print(step)
+        else:
+            print("❌ No solution found.")
+
+
         return solution_path if solution_found else None
     
     # =======================
@@ -470,7 +514,7 @@ class SokobanGame:
         stats_surface.blit(bfs_time, (20, y_offset))
         y_offset += 15
         
-        bfs_memory = self.font.render(f"Memory: {self.bfs_stats['memory']:.2f}MB", True, BLACK)
+        bfs_memory = self.font.render(f"Memory: {self.bfs_stats['memory']:.4f}MB", True, BLACK)
         stats_surface.blit(bfs_memory, (20, y_offset))
         y_offset += 15
         
@@ -575,7 +619,8 @@ class SokobanGame:
                 if solution:
                     self.solution_path = solution
                     self.solution_index = 0
-            
+                    self.auto_play = True
+                    
             elif event.key == pygame.K_2:
                 # Run A*
                 solution = self.solve_astar()
@@ -634,7 +679,15 @@ class SokobanGame:
                     running = False
                 else:
                     running = self.handle_input(event)
-            
+            if self.auto_play and self.solution_index < len(self.solution_path):
+                direction = self.solution_path[self.solution_index]
+                self.game_matrix, self.player_pos = self.apply_move(
+                self.game_matrix, self.player_pos, direction
+             )
+                self.solution_index += 1
+                time.sleep(0.2)
+            elif self.solution_index >= len(self.solution_path):
+                self.auto_play = False
             # Clear screen
             self.screen.fill(GRAY)
             
@@ -653,6 +706,7 @@ class SokobanGame:
         pygame.quit()
         sys.exit()
 
+
 def main():
     """Entry point của chương trình"""
     print("Sokoban solver with Breadth First Search and A* Algorithms")
@@ -663,6 +717,8 @@ def main():
     try:
         game = SokobanGame()
         game.run()
+        
+
     except Exception as e:
         print(f"❌ Error: {e}")
         pygame.quit()
