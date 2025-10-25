@@ -279,28 +279,59 @@ class SokobanGame:
         """Chuyển matrix thành string để hash"""
         return ''.join(''.join(row) for row in matrix)
     
+    # -------------------------
+    # Helper: tách bản đồ tĩnh (1 lần / level)
+    # -------------------------
+    def extract_static_maps(self, matrix):
+        """
+        Trả về:
+        - walls: set of (x,y)
+        - docks: set of (x,y)
+        - floors: set of (x,y)
+        """
+        walls = set()
+        docks = set()
+        floors = set()
+        for y, row in enumerate(matrix):
+            for x, c in enumerate(row):
+                if c == '#':
+                    walls.add((x, y))
+                else:
+                    floors.add((x, y))
+                if c in ['.', '+', '*']:
+                    docks.add((x, y))
+        return walls, docks, floors
+    
     # =======================
     # DEADLOCK DETECTION
     # =======================
+
+    # -------------------------
+    # Deadlock detection với memoization (theo boxes set)
+    # -------------------------
     def is_deadlock(self, matrix):
         """
-        Kiểm tra xem trạng thái hiện tại có bị deadlock không
-        Returns True nếu bị deadlock (không thể giải được)
+        Quick deadlock detection using boxes positions as key.
+        Memo hóa các kết quả để tránh tính nhiều lần.
         """
         boxes = self.get_boxes(matrix)
-        
-        for box_pos in boxes:
-            if self.is_box_deadlock(matrix, box_pos):
+        key = frozenset(boxes)
+        if not hasattr(self, "_deadlock_memo"):
+            self._deadlock_memo = {}
+        if key in self._deadlock_memo:
+            return self._deadlock_memo[key]
+        for b in boxes:
+            if self.is_corner_deadlock(matrix, b):
+                self._deadlock_memo[key] = True
                 return True
-        
+        self._deadlock_memo[key] = False
         return False
     
     def get_boxes(self, matrix):
-        """Lấy danh sách vị trí của tất cả các box chưa vào dock"""
         boxes = []
         for y, row in enumerate(matrix):
             for x, cell in enumerate(row):
-                if cell == '$':  # Box chưa vào dock
+                if cell == '$':  # box not on dock
                     boxes.append((x, y))
         return boxes
     
@@ -325,30 +356,59 @@ class SokobanGame:
         
         return False
     
+    def is_deadlock_matrix(self, boxes, docks, walls):
+        """
+        Kiểm tra deadlock đơn giản: box kẹt góc mà không ở trên dock.
+        """
+        for (bx, by) in boxes:
+            if (bx, by) in docks:
+                continue  # Box đã đúng vị trí
+            # 4 trường hợp kẹt góc
+            if ((bx-1, by) in walls and (bx, by-1) in walls) or \
+            ((bx+1, by) in walls and (bx, by-1) in walls) or \
+            ((bx-1, by) in walls and (bx, by+1) in walls) or \
+            ((bx+1, by) in walls and (bx, by+1) in walls):
+                return True
+        return False
+
+    # -------------------------
+    # Safe corner deadlock check (không OOB)
+    # -------------------------
     def is_corner_deadlock(self, matrix, box_pos):
         """
-        Kiểm tra Corner Deadlock
-        Box bị kẹt ở góc tường và không phải là dock
+        Kiểm tra corner deadlock an toàn (không truy cập ngoài chỉ số).
+        Nếu box ở dock thì không coi là deadlock.
         """
         x, y = box_pos
-        
-        # Nếu box đã ở dock thì không phải deadlock
+        # Nếu box đã ở dock thì không deadlock
         if matrix[y][x] == '*':
             return False
-        
-        # Kiểm tra 4 góc có thể
-        corners = [
-            # Top-left corner
-            (matrix[y-1][x] == '#' and matrix[y][x-1] == '#'),
-            # Top-right corner  
-            (matrix[y-1][x] == '#' and matrix[y][x+1] == '#'),
-            # Bottom-left corner
-            (matrix[y+1][x] == '#' and matrix[y][x-1] == '#'),
-            # Bottom-right corner
-            (matrix[y+1][x] == '#' and matrix[y][x+1] == '#')
-        ]
-        
-        return any(corners)
+
+        max_y = len(matrix) - 1
+        max_x = max(len(row) for row in matrix) - 1
+
+        def is_wall(nx, ny):
+            # treat out-of-range as wall (outer boundary)
+            if ny < 0 or ny > max_y:
+                return True
+            if nx < 0 or nx > (len(matrix[ny]) - 1):
+                return True
+            return matrix[ny][nx] == '#'
+
+        # top-left
+        if is_wall(x-1, y) and is_wall(x, y-1):
+            return True
+        # top-right
+        if is_wall(x+1, y) and is_wall(x, y-1):
+            return True
+        # bottom-left
+        if is_wall(x-1, y) and is_wall(x, y+1):
+            return True
+        # bottom-right
+        if is_wall(x+1, y) and is_wall(x, y+1):
+            return True
+
+        return False
 
     
     def detect_all_deadlocks(self, matrix):
@@ -508,6 +568,41 @@ class SokobanGame:
             self.auto_play_speed = min(2000, self.auto_play_speed + 100)  # Tối đa 2000ms
             print(f"🐌 Speed decreased: {self.auto_play_speed}ms per move")
     
+    # -------------------------
+    # Apply move trên state nhẹ (player_pos, boxes_set) — nhanh, không deepcopy whole matrix
+    # -------------------------
+    def apply_move_state(self, player_pos, boxes_set, move, walls):
+        """
+        Áp dụng một bước di chuyển trong A*.
+        Trả về (player_pos_mới, boxes_set_mới) hoặc (None, None) nếu move không hợp lệ.
+        """
+        px, py = player_pos
+        dx, dy = move
+        nx, ny = px + dx, py + dy
+
+        # Nếu đi vào tường thì không hợp lệ
+        if (nx, ny) in walls:
+            return None, None
+
+        boxes = set(boxes_set)
+
+        # Nếu ô kế tiếp có box
+        if (nx, ny) in boxes:
+            bx, by = nx + dx, ny + dy
+            # Nếu box bị chặn (bởi tường hoặc box khác)
+            if (bx, by) in walls or (bx, by) in boxes:
+                return None, None
+
+            # Di chuyển box
+            boxes.remove((nx, ny))
+            if (bx, by) in boxes:  # Ngăn trường hợp 2 box nhập làm 1
+                return None, None
+            boxes.add((bx, by))
+            return (nx, ny), frozenset(boxes)
+
+        # Nếu ô trống — player chỉ di chuyển
+        return (nx, ny), frozenset(boxes)
+
     # =======================
     # BFS ALGORITHM TEMPLATE
     # =======================
@@ -534,163 +629,120 @@ class SokobanGame:
     # =======================
     # A* ALGORITHM TEMPLATE
     # =======================
-    def heuristic(self, matrix, player_pos):
-        """
-        Hàm heuristic cho A* - Manhattan distance từ các box đến dock gần nhất
-        """
-        total_distance = 0
-        boxes = []
-        docks = []
-        
-        # Tìm tất cả boxes và docks
-        for y, row in enumerate(matrix):
-            for x, cell in enumerate(row):
-                if cell == '$':  # Box chưa đặt đúng chỗ
-                    boxes.append((x, y))
-                elif cell in ['.', '+', '*']:  # Dock hoặc có đối tượng trên dock
-                    docks.append((x, y))
-        
-        # Tính Manhattan distance từ mỗi box đến dock gần nhất
-        for box in boxes:
-            if docks:  # Nếu có dock
-                min_dist = float('inf')
-                for dock in docks:
-                    dist = abs(box[0] - dock[0]) + abs(box[1] - dock[1])
-                    min_dist = min(min_dist, dist)
-                total_distance += min_dist
-        
-        return total_distance
     
+    # -------------------------
+    # Heuristic: tổng min manhattan của mỗi box tới dock gần nhất (admissible)
+    # -------------------------
+    def heuristic(self, boxes_frozen, docks):
+        if not docks or not boxes_frozen:
+            return 0
+        docks_list = list(docks)
+        total = 0
+        for bx, by in boxes_frozen:
+            md = min(abs(bx - dx) + abs(by - dy) for dx, dy in docks_list)
+            total += md
+        return total
+    
+    # -------------------------
+    # Optimized A* (state = (player_pos, frozenset(boxes)))
+    # -------------------------
     def solve_astar(self):
         """
-        Thuật toán A* để tìm đường đi tối ưu trong Sokoban
-        Dựa trên pseudo code trong a-star_solver.md
+        A* Solver cải tiến cho Sokoban
+        - Ngăn 2 box nhập làm 1
+        - Deadlock pruning
+        - Giảm bộ nhớ và thời gian
         """
-        print("🌟 Start Solver using A*...")
+        print("🌟 Running A* Solver (improved)...")
         start_time = time.time()
         process = psutil.Process(os.getpid())
-        start_memory = process.memory_info().rss / (1024 * 1024)  # MB
-        
-        # Khởi tạo
-        initial_state = (self.matrix_to_string(self.game_matrix), self.player_pos)
-        visited = set()  # Set of visited vertices
-        open_list = []  # Priority queue (heap)
-        
-        # Dictionary để lưu trữ g_score (distance from start) và predecessor
-        g_scores = {initial_state: 0}
-        predecessors = {initial_state: None}
-        
-        # Tính f_score cho trạng thái đầu
-        h_score = self.heuristic(self.game_matrix, self.player_pos)
-        f_score = 0 + h_score
-        
-        # Push start node vào open_list với priority = f_score
-        heapq.heappush(open_list, (f_score, 0, self.game_matrix, self.player_pos, []))
-        
+        start_memory = process.memory_info().rss / (1024 * 1024)
+
+        # Parse map
+        walls, docks, boxes = set(), set(), set()
+        player = None
+        for y, row in enumerate(self.game_matrix):
+            for x, cell in enumerate(row):
+                pos = (x, y)
+                if cell == '#':
+                    walls.add(pos)
+                elif cell == '.':
+                    docks.add(pos)
+                elif cell == '$':
+                    boxes.add(pos)
+                elif cell == '*':
+                    boxes.add(pos)
+                    docks.add(pos)
+                elif cell in ['@', '+']:
+                    player = pos
+                    if cell == '+':
+                        docks.add(pos)
+
+        if player is None:
+            print("❌ Player not found!")
+            return None
+
+        # Trạng thái khởi tạo
+        start_state = (player, frozenset(boxes))
+        frontier = []
+        heapq.heappush(frontier, (self.heuristic(frozenset(boxes), docks), 0, start_state, []))
+
+        visited = set()
         nodes_explored = 0
-        
-        while open_list:
-            # Pop node có f_score thấp nhất
-            current_f, current_g, current_matrix, current_player_pos, current_path = heapq.heappop(open_list)
-            current_state = (self.matrix_to_string(current_matrix), current_player_pos)
-            
-            # Kiểm tra nếu đã visited thì skip
-            if current_state in visited:
+
+        directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+
+        while frontier:
+            f, g, (player_pos, boxes_frozen), path = heapq.heappop(frontier)
+
+            if (player_pos, boxes_frozen) in visited:
                 continue
-                
-            # Add vào visited
-            visited.add(current_state)
+            visited.add((player_pos, boxes_frozen))
             nodes_explored += 1
-            
-            # Kiểm tra goal state
-            if self.is_level_completed(current_matrix):
-                print(f"🎯 Solution found!")
-                
-                # Tính toán thống kê
+
+            # Goal state
+            if all(b in docks for b in boxes_frozen):
                 end_time = time.time()
-                end_memory = process.memory_info().rss / (1024 * 1024)  # MB
-                
+                end_memory = process.memory_info().rss / (1024 * 1024)
                 self.astar_stats = {
                     "time": end_time - start_time,
                     "memory": end_memory - start_memory,
                     "nodes": nodes_explored,
-                    "solution_length": len(current_path)
+                    "solution_length": len(path)
                 }
-                
-                print(f"✅ A* completed in {self.astar_stats['time']:.3f}s")
-                print(f"📊 Nodes explored: {self.astar_stats['nodes']}")
-                print(f"💾 Memory used: {self.astar_stats['memory']:.2f} MB")
-                print(f"📏 Solution length: {self.astar_stats['solution_length']}")
-                
-                return current_path
-            
-            # Skip deadlock states để tối ưu (early pruning)
-            if self.is_deadlock(current_matrix):
-                continue
-            
-            # Expand các successor (neighbor states)
-            valid_moves = self.get_valid_moves(current_matrix, current_player_pos)
-            
-            for move in valid_moves:
-                # Apply move để tạo successor state
-                succ_matrix, succ_player_pos = self.apply_move(current_matrix, current_player_pos, move)
-                succ_state = (self.matrix_to_string(succ_matrix), succ_player_pos)
-                succ_path = current_path + [move]
-                
-                # Kiểm tra nếu successor đã visited thì skip
-                if succ_state in visited:
+                print(f"🎯 Solution found! Length = {len(path)}, Nodes = {nodes_explored}")
+                return path
+
+            # Mở rộng successor
+            for dx, dy in directions:
+                new_player, new_boxes = self.apply_move_state(player_pos, boxes_frozen, (dx, dy), walls)
+                if new_player is None:
                     continue
-                
-                # Kiểm tra deadlock cho successor state trước khi add vào queue
-                if self.is_deadlock(succ_matrix):
-                    continue  # Skip deadlock states
-                
-                # Tính g_score mới (distance from start)
-                new_g_score = current_g + 1  # cost = 1 cho mỗi move
-                
-                # Tính h_score (heuristic)
-                h_score = self.heuristic(succ_matrix, succ_player_pos)
-                
-                # Tính f_score = g + h
-                f_score = new_g_score + h_score
-                
-                # Kiểm tra nếu successor đã có trong g_scores và có đường tốt hơn
-                if succ_state in g_scores:
-                    if new_g_score < g_scores[succ_state]:
-                        # Update distance và predecessor
-                        g_scores[succ_state] = new_g_score
-                        predecessors[succ_state] = current_state
-                        
-                        # Add/update vào open_list
-                        heapq.heappush(open_list, (f_score, new_g_score, succ_matrix, succ_player_pos, succ_path))
-                else:
-                    # Successor chưa được explore
-                    g_scores[succ_state] = new_g_score
-                    predecessors[succ_state] = current_state
-                    
-                    # Add vào open_list
-                    heapq.heappush(open_list, (f_score, new_g_score, succ_matrix, succ_player_pos, succ_path))
-        
-        # Không tìm thấy solution
-        print("❌ No solution found!")
-        
-        # Tính toán thống kê
+
+                # Prune deadlock
+                if self.is_deadlock_matrix(new_boxes, docks, walls):
+                    continue
+
+                new_state = (new_player, new_boxes)
+                if new_state in visited:
+                    continue
+
+                new_g = g + 1
+                h = self.heuristic(new_boxes, docks)
+                heapq.heappush(frontier, (new_g + h, new_g, new_state, path + [(dx, dy)]))
+
+        # Không tìm được lời giải
+        print("❌ No solution found.")
         end_time = time.time()
-        end_memory = process.memory_info().rss / (1024 * 1024)  # MB
-        
+        end_memory = process.memory_info().rss / (1024 * 1024)
         self.astar_stats = {
             "time": end_time - start_time,
             "memory": end_memory - start_memory,
             "nodes": nodes_explored,
             "solution_length": 0
         }
-        
-        print(f"✅ A* completed in {self.astar_stats['time']:.3f}s")
-        print(f"📊 Nodes explored: {self.astar_stats['nodes']}")
-        print(f"💾 Memory used: {self.astar_stats['memory']:.2f} MB")
-        print(f"📏 Solution length: {self.astar_stats['solution_length']}")
-        
         return None
+
     
     def display_statistics(self):
         """Hiển thị thống kê A* Algorithm với Deadlock Detection"""
@@ -945,6 +997,7 @@ class SokobanGame:
         
         pygame.quit()
         sys.exit()
+
 
 def main():
     """Entry point của chương trình"""
