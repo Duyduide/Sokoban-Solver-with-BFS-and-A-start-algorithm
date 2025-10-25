@@ -278,94 +278,219 @@ class SokobanGame:
         return ''.join(''.join(row) for row in matrix)
     
     # =======================
-    # DEADLOCK DETECTION
-    # =======================
-    def is_deadlock(self, matrix):
-        """
-        Kiểm tra xem trạng thái hiện tại có bị deadlock không
-        Returns True nếu bị deadlock (không thể giải được)
-        """
-        boxes = self.get_boxes(matrix)
-        
-        for box_pos in boxes:
-            if self.is_box_deadlock(matrix, box_pos):
-                return True
-        
-        return False
-    
-    def get_boxes(self, matrix):
-        """Lấy danh sách vị trí của tất cả các box chưa vào dock"""
-        boxes = []
-        for y, row in enumerate(matrix):
-            for x, cell in enumerate(row):
-                if cell == '$':  # Box chưa vào dock
-                    boxes.append((x, y))
-        return boxes
-    
-    def get_docks(self, matrix):
-        """Lấy danh sách vị trí của tất cả các dock"""
-        docks = []
-        for y, row in enumerate(matrix):
-            for x, cell in enumerate(row):
-                if cell in ['.', '+', '*']:  # Dock (trống, có player, có box)
-                    docks.append((x, y))
-        return docks
-    
-    def is_box_deadlock(self, matrix, box_pos):
-        """Kiểm tra một box cụ thể có bị deadlock không"""
-        x, y = box_pos
-        
-        # 1. Corner Deadlock - Box bị kẹt ở góc
-        if self.is_corner_deadlock(matrix, box_pos):
-            return True
-        
-        
-        
-        return False
-    
-    def is_corner_deadlock(self, matrix, box_pos):
-        """
-        Kiểm tra Corner Deadlock
-        Box bị kẹt ở góc tường và không phải là dock
-        """
-        x, y = box_pos
-        
-        # Nếu box đã ở dock thì không phải deadlock
-        if matrix[y][x] == '*':
-            return False
-        
-        # Kiểm tra 4 góc có thể
-        corners = [
-            # Top-left corner
-            (matrix[y-1][x] == '#' and matrix[y][x-1] == '#'),
-            # Top-right corner  
-            (matrix[y-1][x] == '#' and matrix[y][x+1] == '#'),
-            # Bottom-left corner
-            (matrix[y+1][x] == '#' and matrix[y][x-1] == '#'),
-            # Bottom-right corner
-            (matrix[y+1][x] == '#' and matrix[y][x+1] == '#')
-        ]
-        
-        return any(corners)
+	# DEADLOCK DETECTION
+	# =======================
 
-    
-    def detect_all_deadlocks(self, matrix):
-        """
-        Phát hiện tất cả các deadlock trong trạng thái hiện tại
-        Trả về danh sách các deadlock được tìm thấy
-        """
-        deadlocks = []
-        boxes = self.get_boxes(matrix)
-        
-        for box_pos in boxes:
-            x, y = box_pos
-            
-            if self.is_corner_deadlock(matrix, box_pos):
-                deadlocks.append(f"Corner deadlock at ({x}, {y})")
-            
-            
-        
-        return deadlocks
+	def is_deadlock(self, matrix):
+		boxes = self.get_boxes(matrix)
+		for box_pos in boxes:
+			# SIMPLE DEADLOCKS
+			if self.is_corner_deadlock(matrix, box_pos): return True			
+			if self.is_wall_deadlock(matrix, box_pos): return True
+			# FREEZE DEADLOCKS 
+			if self.is_2x2_block_freeze(matrix): return True		
+			if self.is_freeze_wall_deadlock(matrix): return True
+		return False
+
+	def get_boxes(self, matrix):
+		"""Lấy danh sách vị trí của tất cả các box chưa vào dock"""
+		boxes = []
+		for y, row in enumerate(matrix):
+			for x, cell in enumerate(row):
+				if cell == '$':  # Box chưa vào dock
+					boxes.append((x, y))
+		return boxes
+	
+	def get_docks(self, matrix):
+		"""Lấy danh sách vị trí của tất cả các dock"""
+		docks = []
+		for y, row in enumerate(matrix):
+			for x, cell in enumerate(row):
+				if cell in ['.', '+', '*']:  # Dock (trống, có player, có box)
+					docks.append((x, y))
+		return docks
+
+	# SIMPLE DEADLOCKS
+
+	def is_corner_deadlock(self, matrix, box_pos):
+		# CORNER DEADLOCK - Deadlock ở góc
+		x, y = box_pos
+		# Nếu box đã ở dock thì không phải deadlock
+		if matrix[y][x] == '*': return False		
+		corners = [
+			# Góc trên-trái
+			(y > 0 and x > 0 and 
+			matrix[y-1][x] == '#' and matrix[y][x-1] == '#'),
+			# Góc trên-phải
+			(y > 0 and x < len(matrix[y])-1 and
+			matrix[y-1][x] == '#' and matrix[y][x+1] == '#'),			
+			# Góc dưới-trái
+			(y < len(matrix)-1 and x > 0 and
+			matrix[y+1][x] == '#' and matrix[y][x-1] == '#'),
+			# Góc dưới-phải
+			(y < len(matrix)-1 and x < len(matrix[y])-1 and
+			matrix[y+1][x] == '#' and matrix[y][x+1] == '#')
+		]
+		
+		return any(corners)
+
+	def is_wall_deadlock(self, matrix, box_pos):
+		x, y = box_pos
+		# Nếu box đã ở dock thì không phải deadlock
+		if matrix[y][x] in ['*', '.']: return False
+		# Loại trừ corner deadlock để tránh trùng 
+		if self.is_corner_deadlock(matrix, box_pos): return False
+		# Kiểm tra deadlock theo hàng - Tường ở phía trên hoặc dưới
+		# Tường phía trên box
+		if y > 0 and matrix[y-1][x] == '#':
+			if not self.has_dock_on_row(matrix, y): # Kiểm tra không có dock nào trong hàng
+				# Quét trái
+				for i in range(x, -1, -1):
+					if matrix[y][i] == '#': break # Box bị chặn bởi một ô tường trong hàng
+					if matrix[y-1][i] != '#': return False # Tìm thấy một ô trống trên tường phía trên
+				# Quét phải
+				for i in range(x, len(matrix[y])):
+					if matrix[y][i] == '#': break 
+					if matrix[y-1][i] != '#': return False 
+				return True 
+		# Tường phía dưới box
+		if y < len(matrix) - 1 and matrix[y+1][x] == '#':
+			if not self.has_dock_on_row(matrix, y):
+				# Quét trái
+				for i in range(x, -1, -1):
+					if matrix[y][i] == '#': break
+					if matrix[y+1][i] != '#': return False
+				# Quét phải
+				for i in range(x, len(matrix[y])):
+					if matrix[y][i] == '#': break
+					if matrix[y+1][i] != '#': return False
+				return True
+		# Kiểm tra deadlock theo cột - Tường ở phía trái hoặc phải
+		# Tường phía trái box
+		if x > 0 and matrix[y][x-1] == '#':
+			if not self.has_dock_on_column(matrix, x):
+				# Quét lên
+				for i in range(y, -1, -1):
+					if matrix[i][x] == '#': break 
+					if matrix[i][x-1] != '#': return False 
+				# Quét xuống
+				for i in range(y, len(matrix)):
+					if matrix[i][x] == '#': break
+					if matrix[i][x-1] != '#': return False
+				return True
+		# Tường phía phải box
+		if x < len(matrix[y]) - 1 and matrix[y][x+1] == '#':
+			if not self.has_dock_on_column(matrix, x):
+				# Quét lên
+				for i in range(y, -1, -1):
+					if matrix[i][x] == '#': break
+					if matrix[i][x+1] != '#': return False
+				# Quét xuống
+				for i in range(y, len(matrix)):
+					if matrix[i][x] == '#': break
+					if matrix[i][x+1] != '#': return False
+				return True
+
+		return False
+
+	def has_dock_on_row(self, matrix, row_idx):
+		for cell in matrix[row_idx]:
+			if cell in ['.', '+', '*']:
+				return True
+		return False
+
+	def has_dock_on_column(self, matrix, col_idx):
+		for row in matrix:
+			if col_idx < len(row) and row[col_idx] in ['.', '+', '*']:
+				return True
+		return False
+
+	# FREEZE DEADLOCKS
+
+	def is_2x2_block_freeze(self, matrix):
+		height = len(matrix)
+		# Duyệt qua tất cả vị trí có thể là góc trên-trái của khối 2x2
+		for y in range(height - 1):
+			width = len(matrix[y])
+			for x in range(width - 1):
+				# Kiểm tra xem 4 ô có phải đều là box hoặc tường không
+				if x + 1 >= len(matrix[y+1]): continue
+				top_left = matrix[y][x]
+				top_right = matrix[y][x+1]
+				bottom_left = matrix[y+1][x]
+				bottom_right = matrix[y+1][x+1]
+				block_2x2 = [top_left, top_right, bottom_left, bottom_right]
+				# Nếu cả 4 ô đều là box ($ hoặc *)
+				if all(cell in ['$', '*'] for cell in block_2x2):
+					# Và có ít nhất 1 box chưa vào dock
+					if any(cell == '$' for cell in block_2x2):
+						return (x, y) 
+		return False
+
+	def is_freeze_wall_deadlock(self, matrix):
+		
+		# Loại trừ 2x2 deadlock để tránh trùng 
+		if self.is_2x2_block_freeze(matrix): return False
+		height = len(matrix)
+		num_cols = max(len(r) for r in matrix) if matrix else 0
+		# KIỂM TRA CHUỖI NGANG 
+		for y, row in enumerate(matrix):
+			sequences = self.find_consecutive_boxes(row)
+			for x, length in sequences:
+				if length < 2 or not any(row[x + i] == '$' for i in range(length)):
+					continue
+				if all(((y > 0 and x + i < len(matrix[y-1]) and matrix[y-1][x + i] == '#') or
+						(y < height - 1 and x + i < len(matrix[y+1]) and matrix[y+1][x + i] == '#'))
+					for i in range(length)):
+					return (length, (x, y))
+		# KIỂM TRA CHUỖI DỌC
+		for x in range(num_cols):
+			column = [matrix[y][x] if x < len(matrix[y]) else ' ' for y in range(height)]
+			sequences = self.find_consecutive_boxes(column)
+			for y, length in sequences:
+				if length < 2 or not any(column[y + i] == '$' for i in range(length)):
+					continue
+				if all(((x > 0 and x - 1 < len(matrix[y + i]) and matrix[y + i][x - 1] == '#') or
+						(x < num_cols - 1 and x + 1 < len(matrix[y + i]) and matrix[y + i][x + 1] == '#'))
+					for i in range(length)):
+					return (length, (x, y))
+
+		return False
+			
+	def find_consecutive_boxes(self, line):
+		sequences = []
+		i = 0
+		while i < len(line):
+			if line[i] in ['$', '*']:
+				start = i
+				while i < len(line) and line[i] in ['$', '*']:	i += 1
+				sequences.append((start, i - start))
+			else: i += 1
+		return sequences
+
+	# DETECT ALL DEADLOCK
+	def detect_all_deadlocks(self, matrix):
+		
+		deadlocks = []
+		boxes = self.get_boxes(matrix)
+		# SIMPLE DEADLOCKS 
+		for box_pos in boxes:
+			x, y = box_pos
+			if self.is_corner_deadlock(matrix, box_pos):
+				deadlocks.append(f"Corner deadlock at ({x}, {y})")
+			if self.is_wall_deadlock(matrix, box_pos):
+				deadlocks.append(f"Wall deadlock at ({x}, {y})")
+		# FREEZE DEADLOCKS 
+		if self.is_2x2_block_freeze(matrix):
+			pos = self.is_2x2_block_freeze(matrix)
+			if pos:	x, y = pos
+			deadlocks.append(f"Freeze deadlock 2x2 at ({x}, {y})")
+		if self.is_freeze_wall_deadlock(matrix):
+			pos = self.is_freeze_wall_deadlock(matrix)
+			if pos:	length, (x, y) = pos 
+			deadlocks.append(f"Freeze deadlock {length} boxs at ({x}, {y})")
+		
+		return deadlocks
     
     # =======================
     # AUTO-PLAY SOLUTION
