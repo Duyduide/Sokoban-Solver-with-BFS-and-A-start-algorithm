@@ -83,4 +83,7 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+!ALGORITHM_GUIDE.md
+
 *.md 
+
