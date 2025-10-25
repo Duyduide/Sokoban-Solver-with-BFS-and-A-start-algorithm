@@ -31,9 +31,11 @@ source sokoban-venv/bin/activate
 ```bash
 pip install pygame
 pip install psutil
-pip install memory-profiler
 ```
-
+or
+```bash
+pip install -r requirements.txt
+```
 ## Chạy chương trình
 ```bash
 python main.py

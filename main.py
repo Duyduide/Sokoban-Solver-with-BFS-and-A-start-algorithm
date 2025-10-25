@@ -2,14 +2,12 @@
 Sokoban Game với BFS và A* Search Algorithms
 CO3061 Nhập môn AI - Trường Đại học Bách Khoa TP.HCM
 """
-
 import pygame
 import sys
 import time
 import psutil
 import os
 from collections import deque
-from memory_profiler import profile
 import heapq
 from copy import deepcopy
 
@@ -237,7 +235,7 @@ class SokobanGame:
     
     def apply_move(self, matrix, player_pos, move):
         """Áp dụng một nước đi và trả về matrix mới cùng vị trí player mới"""
-        new_matrix = deepcopy(matrix)
+        new_matrix = [row[:] for row in matrix]
         px, py = player_pos
         dx, dy = move
         new_x, new_y = px + dx, py + dy
@@ -375,10 +373,10 @@ class SokobanGame:
     def start_auto_play(self, solution_path):
         """Bắt đầu auto-play solution"""
         if not solution_path:
-            print("❌ No solution to play!")
+            print("No solution to play!")
             return
             
-        print(f"🎬 Starting auto-play with {len(solution_path)} moves...")
+        print(f"Starting auto-play with {len(solution_path)} moves...")
         
         # Lưu solution trước khi reset level (vì load_level sẽ clear solution_path)
         temp_solution = solution_path.copy()
@@ -395,12 +393,12 @@ class SokobanGame:
         # Tạo lịch sử các state để có thể step backward
         self.generate_solution_history()
         
-        print(f"✅ Auto-play initialized:")
+        print(f"Auto-play initialized:")
         print(f"   • Solution length: {len(self.solution_path)}")
         print(f"   • Auto-playing: {self.auto_playing}")
         print(f"   • Speed: {self.auto_play_speed}ms per move")
         print(f"   • History states: {len(self.solution_matrix_history)}")
-        print("▶️ Auto-play will start in 1 second...")
+        print("Auto-play will start in 1 second...")
     
     def generate_solution_history(self):
         """Tạo lịch sử tất cả states trong solution"""
@@ -418,7 +416,7 @@ class SokobanGame:
                 break
         
         if not current_player_pos:
-            print("❌ Cannot find player position in original level!")
+            print("Cannot find player position in original level!")
             return
         
         # Lưu state ban đầu
@@ -444,7 +442,7 @@ class SokobanGame:
             else:
                 # Kết thúc auto-play
                 self.auto_playing = False
-                print("🎉 Auto-play completed!")
+                print("Auto-play completed!")
     
     def step_solution_forward(self):
         """Thực hiện một bước tiếp theo trong solution"""
@@ -453,12 +451,12 @@ class SokobanGame:
             move = self.solution_path[self.solution_index]
             
             # Print current matrix state
-            print(f"\n🎮 Current matrix state (Step {self.solution_index + 1}/{len(self.solution_path)}):")
+            print(f"\nCurrent matrix state (Step {self.solution_index + 1}/{len(self.solution_path)}):")
             for row in self.game_matrix:
                 print(''.join(row))
             
             # Debug info
-            print(f"📍 Executing step {self.solution_index + 1}/{len(self.solution_path)}: {move}")
+            print(f"Executing step {self.solution_index + 1}/{len(self.solution_path)}: {move}")
             print(f"   Current pos: {self.player_pos}")
             
             # Apply the move
@@ -471,11 +469,11 @@ class SokobanGame:
             if self.solution_index >= len(self.solution_path):
                 self.auto_playing = False
                 if self.is_level_completed(self.game_matrix):
-                    print("🎉 Solution completed! Level solved!")
+                    print("Solution completed! Level solved!")
                 else:
-                    print("⚠️ Solution finished but level not completed")
+                    print("Solution finished but level not completed")
         else:
-            print("⚠️ No more moves in solution!")
+            print("No more moves in solution!")
             self.auto_playing = False
     
     def step_solution_backward(self):
@@ -485,7 +483,7 @@ class SokobanGame:
             # Restore state từ history
             if self.solution_index < len(self.solution_matrix_history):
                 self.game_matrix, self.player_pos = deepcopy(self.solution_matrix_history[self.solution_index])
-                print(f"📍 Step {self.solution_index}/{len(self.solution_path)} (backward)")
+                print(f"Step {self.solution_index}/{len(self.solution_path)} (backward)")
     
     def toggle_auto_play(self):
         """Toggle auto-play on/off"""
@@ -493,43 +491,103 @@ class SokobanGame:
             self.auto_playing = not self.auto_playing
             if self.auto_playing:
                 self.last_move_time = pygame.time.get_ticks()
-                print(f"▶️ Auto-play resumed (speed: {self.auto_play_speed}ms)")
+                print(f"Auto-play resumed (speed: {self.auto_play_speed}ms)")
             else:
-                print("⏸️ Auto-play paused")
+                print("Auto-play paused")
         else:
-            print("❌ No solution to play!")
+            print("No solution to play!")
     
     def adjust_speed(self, faster=True):
         """Điều chỉnh tốc độ auto-play"""
         if faster:
             self.auto_play_speed = max(100, self.auto_play_speed - 100)  # Tối thiểu 100ms
-            print(f"⚡ Speed increased: {self.auto_play_speed}ms per move")
+            print(f"Speed increased: {self.auto_play_speed}ms per move")
         else:
             self.auto_play_speed = min(2000, self.auto_play_speed + 100)  # Tối đa 2000ms
-            print(f"🐌 Speed decreased: {self.auto_play_speed}ms per move")
+            print(f"Speed decreased: {self.auto_play_speed}ms per move")
     
     # =======================
     # BFS ALGORITHM TEMPLATE
     # =======================
     def solve_bfs(self):
         """
-        BFS Algorithm - Not implemented in this version
-        Focus on A* algorithm implementation
+        Thuật toán BFS để tìm đường đi trong Sokoban
         """
-        print("🔍 BFS Algorithm")
-        print("❌ BFS is not implemented in this version")
-        print("🌟 Please use A* algorithm (Press '2') for solving")
-        print("💡 A* provides optimal solutions with heuristic guidance")
+        # phần chuẩn bị thông số để đo thời gian và bộ nhớ 
+        print("Start Solver using BFS...")
+        start_time = time.time() # thời điểm bắt đầu
+        #lấy thông tin tiến trình hiện tại  
+        process = psutil.Process(os.getpid()) 
+        #chuyển đổi sang MB
+        start_memory = process.memory_info().rss / 1024 / 1024  # MB
         
-        # Reset stats
+        # TODO: Implement BFS logic here
+        # Hint: Sử dụng queue (deque) để lưu trữ các trạng thái giống hồi học DSA á =))))
+        # Cần track: current_matrix, player_position, path_to_reach_this_state
+
+        # Placeholder implementation
+        nodes_explored = 0
+        solution_found = False
+        solution_path = []
+
+        visited = set()
+        queue = deque()
+        player_pos = self.player_pos #lấy thông tin vị trí người chơi hiện tại
+        matrix = deepcopy(self.game_matrix) #bản đồ hiện tại
+        matrix_key = self.matrix_to_string(matrix) # biến ma trận thành chuỗi 
+        queue.append((matrix, player_pos, []))
+        visited.add((matrix_key, player_pos))
+
+        while queue:
+            nodes_explored += 1 # tăng bộ đếm
+            current_matrix, current_player_pos, path = queue.popleft() # lấy phần tử đầu tiên của queue
+            if self.is_level_completed(current_matrix): # nếu level đã hoàn thành thì break
+                solution_found = True
+                solution_path = path
+                break
+            #kiểm tra deadlock
+            deadlock = self.detect_all_deadlocks(current_matrix)
+            if not deadlock:                
+                # danh sách các hướng đi khả thi của player
+                valid_move = self.get_valid_moves(current_matrix, current_player_pos) 
+                #lặp qua từng hướng để thử mở rộng
+                for direction in valid_move:
+                    #Áp dụng bước đi
+                    new_current_matrix, new_current_player_pos = self.apply_move(current_matrix, current_player_pos, direction)
+                    new_matrix_key = self.matrix_to_string(new_current_matrix)
+                    # tránh lặp trạng thái đã visited nếu chưa có thì thêm vào visited
+                    if (new_matrix_key, new_current_player_pos) not in visited:
+                        visited.add((new_matrix_key, new_current_player_pos))
+                        new_path = path + [direction]
+                        queue.append((new_current_matrix, new_current_player_pos, new_path))
+                    
+        # Tính toán thống kê
+        # ghi lại thời gian kết thúc và bộ nhớ chiếm dụng (MB)
+        end_time = time.time() 
+        end_memory = process.memory_info().rss / 1024 / 1024  # MB
+        
         self.bfs_stats = {
-            "time": 0,
-            "memory": 0,
-            "nodes": 0,
-            "solution_length": 0
+            "time": end_time - start_time,
+            "memory": end_memory - start_memory,
+            "nodes": nodes_explored,
+            "solution_length": len(solution_path) if solution_found else 0
         }
         
-        return None
+        if solution_found:
+            print(f"Solution found!")
+            print(f"BFS completed in {self.bfs_stats['time']:.3f}s")
+            print(f"Nodes explored: {self.bfs_stats['nodes']}")
+            print(f"Memory used: {self.bfs_stats['memory']:.2f} MB")
+            print(f"Solution length: {self.bfs_stats['solution_length']}")
+        else:
+            print("No solution found!")
+            print(f"BFS completed in {self.bfs_stats['time']:.3f}s")
+            print(f"Nodes explored: {self.bfs_stats['nodes']}")
+            print(f"Memory used: {self.bfs_stats['memory']:.2f} MB")
+            print(f"Solution length: {self.bfs_stats['solution_length']}")
+
+
+        return solution_path if solution_found else None
     
     # =======================
     # A* ALGORITHM TEMPLATE
@@ -564,9 +622,8 @@ class SokobanGame:
     def solve_astar(self):
         """
         Thuật toán A* để tìm đường đi tối ưu trong Sokoban
-        Dựa trên pseudo code trong a-star_solver.md
         """
-        print("🌟 Start Solver using A*...")
+        print("Start Solver using A*...")
         start_time = time.time()
         process = psutil.Process(os.getpid())
         start_memory = process.memory_info().rss / (1024 * 1024)  # MB
@@ -604,7 +661,7 @@ class SokobanGame:
             
             # Kiểm tra goal state
             if self.is_level_completed(current_matrix):
-                print(f"🎯 Solution found!")
+                print(f"Solution found!")
                 
                 # Tính toán thống kê
                 end_time = time.time()
@@ -617,10 +674,10 @@ class SokobanGame:
                     "solution_length": len(current_path)
                 }
                 
-                print(f"✅ A* completed in {self.astar_stats['time']:.3f}s")
-                print(f"📊 Nodes explored: {self.astar_stats['nodes']}")
-                print(f"💾 Memory used: {self.astar_stats['memory']:.2f} MB")
-                print(f"📏 Solution length: {self.astar_stats['solution_length']}")
+                print(f"A* completed in {self.astar_stats['time']:.3f}s")
+                print(f"Nodes explored: {self.astar_stats['nodes']}")
+                print(f"Memory used: {self.astar_stats['memory']:.2f} MB")
+                print(f"Solution length: {self.astar_stats['solution_length']}")
                 
                 return current_path
             
@@ -672,7 +729,7 @@ class SokobanGame:
                     heapq.heappush(open_list, (f_score, new_g_score, succ_matrix, succ_player_pos, succ_path))
         
         # Không tìm thấy solution
-        print("❌ No solution found!")
+        print("No solution found!")
         
         # Tính toán thống kê
         end_time = time.time()
@@ -685,45 +742,65 @@ class SokobanGame:
             "solution_length": 0
         }
         
-        print(f"✅ A* completed in {self.astar_stats['time']:.3f}s")
-        print(f"📊 Nodes explored: {self.astar_stats['nodes']}")
-        print(f"💾 Memory used: {self.astar_stats['memory']:.2f} MB")
-        print(f"📏 Solution length: {self.astar_stats['solution_length']}")
+        print(f"A* completed in {self.astar_stats['time']:.3f}s")
+        print(f"Nodes explored: {self.astar_stats['nodes']}")
+        print(f"Memory used: {self.astar_stats['memory']:.2f} MB")
+        print(f"Solution length: {self.astar_stats['solution_length']}")
         
         return None
     
     def display_statistics(self):
-        """Hiển thị thống kê A* Algorithm với Deadlock Detection"""
+        """Hiển thị thống kê BFS và A* Algorithm"""
         y_offset = 10
-        stats_surface = pygame.Surface((380, 280))
+        stats_surface = pygame.Surface((450, 350))
         stats_surface.fill(WHITE)
         stats_surface.set_alpha(230)
         
         # Tiêu đề
-        title = self.font.render("A* ALGORITHM STATS", True, BLACK)
+        title = self.font.render("ALGORITHM COMPARISON", True, BLACK)
         stats_surface.blit(title, (10, y_offset))
         y_offset += 30
         
-        # A* Stats với highlighting
-        astar_title = self.font.render("A* Solver with Deadlock Detection:", True, (220, 0, 0))
+        # BFS Stats
+        bfs_title = self.font.render("BFS Algorithm:", True, (0, 150, 0))
+        stats_surface.blit(bfs_title, (10, y_offset))
+        y_offset += 25
+        
+        bfs_time = self.font.render(f"Time: {self.bfs_stats['time']:.3f}s", True, BLACK)
+        stats_surface.blit(bfs_time, (20, y_offset))
+        y_offset += 20
+        
+        bfs_memory = self.font.render(f"Memory: {self.bfs_stats['memory']:.2f}MB", True, BLACK)
+        stats_surface.blit(bfs_memory, (20, y_offset))
+        y_offset += 20
+        
+        bfs_nodes = self.font.render(f"Nodes: {self.bfs_stats['nodes']}", True, BLACK)
+        stats_surface.blit(bfs_nodes, (20, y_offset))
+        y_offset += 20
+        
+        bfs_length = self.font.render(f"Solution: {self.bfs_stats['solution_length']}", True, BLACK)
+        stats_surface.blit(bfs_length, (20, y_offset))
+        y_offset += 30
+        
+        # A* Stats
+        astar_title = self.font.render("A* Algorithm:", True, (220, 0, 0))
         stats_surface.blit(astar_title, (10, y_offset))
         y_offset += 25
         
-        # Performance metrics
-        astar_time = self.font.render(f"Execution Time: {self.astar_stats['time']:.3f}s", True, BLACK)
-        stats_surface.blit(astar_time, (15, y_offset))
+        astar_time = self.font.render(f"Time: {self.astar_stats['time']:.3f}s", True, BLACK)
+        stats_surface.blit(astar_time, (20, y_offset))
+        y_offset += 20
+
+        astar_memory = self.font.render(f"Memory: {self.astar_stats['memory']:.2f}MB", True, BLACK)
+        stats_surface.blit(astar_memory, (20, y_offset))
         y_offset += 20
         
-        astar_memory = self.font.render(f"Memory Usage: {self.astar_stats['memory']:.2f}MB", True, BLACK)
-        stats_surface.blit(astar_memory, (15, y_offset))
+        astar_nodes = self.font.render(f"Nodes: {self.astar_stats['nodes']}", True, BLACK)
+        stats_surface.blit(astar_nodes, (20, y_offset))
         y_offset += 20
         
-        astar_nodes = self.font.render(f"Nodes Explored: {self.astar_stats['nodes']}", True, BLACK)
-        stats_surface.blit(astar_nodes, (15, y_offset))
-        y_offset += 20
-        
-        astar_length = self.font.render(f"Solution Length: {self.astar_stats['solution_length']}", True, BLACK)
-        stats_surface.blit(astar_length, (15, y_offset))
+        astar_length = self.font.render(f"Solution: {self.astar_stats['solution_length']}", True, BLACK)
+        stats_surface.blit(astar_length, (20, y_offset))
         y_offset += 25
         
         # Deadlock info
@@ -735,16 +812,16 @@ class SokobanGame:
         y_offset += 20
         
         # Status
-        if self.astar_stats['solution_length'] > 0:
+        if self.astar_stats['solution_length'] > 0 or self.bfs_stats['solution_length'] > 0:
             status_text = self.font.render("Solution Found!", True, (0, 150, 0))
-        elif self.astar_stats['nodes'] > 0:
+        elif self.astar_stats['nodes'] > 0 or self.bfs_stats['nodes'] > 0:
             status_text = self.font.render("No Solution", True, (200, 0, 0))
         else:
             status_text = self.font.render("Ready to solve", True, (0, 0, 200))
         
         stats_surface.blit(status_text, (15, y_offset))
         
-        self.screen.blit(stats_surface, (WINDOW_WIDTH - 390, 10))
+        self.screen.blit(stats_surface, (WINDOW_WIDTH - 460, 10))
     
     def display_ui_info(self):
         """Hiển thị thông tin điều khiển và level"""
@@ -757,8 +834,8 @@ class SokobanGame:
                 "R: Reset Level",
                 "N: Next Level", 
                 "P: Previous Level",
-                "1: BFS (Not implemented)",
-                "2: Run A* Solver ⭐",
+                "1: Run BFS Solver",
+                "2: Run A* Solver",
                 "D: Check Deadlocks",
                 "ESC: Quit"
             ]
@@ -782,8 +859,7 @@ class SokobanGame:
         
         y_offset = WINDOW_HEIGHT - 240
         for text in info_texts:
-            # Highlight A* option
-            color = (255, 255, 0) if "A* Solver" in text else WHITE  # Yellow for A*
+            color = WHITE
             color = (128, 128, 128) if "Not implemented" in text else color  # Gray for not implemented
             
             text_surface = self.font.render(text, True, color)
@@ -838,9 +914,8 @@ class SokobanGame:
                 # Run BFS
                 solution = self.solve_bfs()
                 if solution:
-                    self.solution_path = solution
-                    self.solution_index = 0
-            
+                    self.start_auto_play(solution)
+                    
             elif event.key == pygame.K_2:
                 # Run A*
                 solution = self.solve_astar()
@@ -851,18 +926,18 @@ class SokobanGame:
                 # Check deadlocks
                 deadlocks = self.detect_all_deadlocks(self.game_matrix)
                 if deadlocks:
-                    print("🚫 DEADLOCK DETECTED:")
+                    print("DEADLOCK DETECTED:")
                     for deadlock in deadlocks:
                         print(f"  • {deadlock}")
                     print(f"Total deadlocks found: {len(deadlocks)}")
                 else:
-                    print("✅ No deadlocks detected in current state")
+                    print("No deadlocks detected in current state")
                     
                 # Check if current state is completely deadlocked
                 if self.is_deadlock(self.game_matrix):
-                    print("💀 This state is UNSOLVABLE!")
+                    print("This state is UNSOLVABLE!")
                 else:
-                    print("🎯 State is still solvable")
+                    print("State is still solvable")
             
             # Auto-play controls
             elif event.key == pygame.K_SPACE:
@@ -911,7 +986,7 @@ class SokobanGame:
             )
             
             if self.is_level_completed(self.game_matrix):
-                print("🎉 Level completed!")
+                print("Level completed!")
     
     def run(self):
         """Main game loop"""
@@ -946,6 +1021,7 @@ class SokobanGame:
         pygame.quit()
         sys.exit()
 
+
 def main():
     """Entry point của chương trình"""
     print("Sokoban solver with Breadth First Search and A* Algorithms")
@@ -956,8 +1032,9 @@ def main():
     try:
         game = SokobanGame()
         game.run()
+        
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"Error: {e}")
         pygame.quit()
         sys.exit(1)
 
