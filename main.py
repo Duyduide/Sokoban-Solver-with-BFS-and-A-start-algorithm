@@ -284,12 +284,10 @@ class SokobanGame:
 	def is_deadlock(self, matrix):
 		boxes = self.get_boxes(matrix)
 		for box_pos in boxes:
-			# SIMPLE DEADLOCKS
-			if self.is_corner_deadlock(matrix, box_pos): return True			
-			if self.is_wall_deadlock(matrix, box_pos): return True
-			# FREEZE DEADLOCKS 
-			if self.is_2x2_block_freeze(matrix): return True		
-			if self.is_freeze_wall_deadlock(matrix): return True
+			if self.is_corner_deadlock(matrix, box_pos): 
+				return True			
+			if self.is_wall_deadlock(matrix, box_pos): 
+				return True
 		return False
 
 	def get_boxes(self, matrix):
@@ -404,58 +402,6 @@ class SokobanGame:
 			if col_idx < len(row) and row[col_idx] in ['.', '+', '*']:
 				return True
 		return False
-
-	# FREEZE DEADLOCKS
-
-	def is_2x2_block_freeze(self, matrix):
-		height = len(matrix)
-		# Duyệt qua tất cả vị trí có thể là góc trên-trái của khối 2x2
-		for y in range(height - 1):
-			width = len(matrix[y])
-			for x in range(width - 1):
-				# Kiểm tra xem 4 ô có phải đều là box hoặc tường không
-				if x + 1 >= len(matrix[y+1]): continue
-				top_left = matrix[y][x]
-				top_right = matrix[y][x+1]
-				bottom_left = matrix[y+1][x]
-				bottom_right = matrix[y+1][x+1]
-				block_2x2 = [top_left, top_right, bottom_left, bottom_right]
-				# Nếu cả 4 ô đều là box ($ hoặc *)
-				if all(cell in ['$', '*'] for cell in block_2x2):
-					# Và có ít nhất 1 box chưa vào dock
-					if any(cell == '$' for cell in block_2x2):
-						return (x, y) 
-		return False
-
-	def is_freeze_wall_deadlock(self, matrix):
-		
-		# Loại trừ 2x2 deadlock để tránh trùng 
-		if self.is_2x2_block_freeze(matrix): return False
-		height = len(matrix)
-		num_cols = max(len(r) for r in matrix) if matrix else 0
-		# KIỂM TRA CHUỖI NGANG 
-		for y, row in enumerate(matrix):
-			sequences = self.find_consecutive_boxes(row)
-			for x, length in sequences:
-				if length < 2 or not any(row[x + i] == '$' for i in range(length)):
-					continue
-				if all(((y > 0 and x + i < len(matrix[y-1]) and matrix[y-1][x + i] == '#') or
-						(y < height - 1 and x + i < len(matrix[y+1]) and matrix[y+1][x + i] == '#'))
-					for i in range(length)):
-					return (length, (x, y))
-		# KIỂM TRA CHUỖI DỌC
-		for x in range(num_cols):
-			column = [matrix[y][x] if x < len(matrix[y]) else ' ' for y in range(height)]
-			sequences = self.find_consecutive_boxes(column)
-			for y, length in sequences:
-				if length < 2 or not any(column[y + i] == '$' for i in range(length)):
-					continue
-				if all(((x > 0 and x - 1 < len(matrix[y + i]) and matrix[y + i][x - 1] == '#') or
-						(x < num_cols - 1 and x + 1 < len(matrix[y + i]) and matrix[y + i][x + 1] == '#'))
-					for i in range(length)):
-					return (length, (x, y))
-
-		return False
 			
 	def find_consecutive_boxes(self, line):
 		sequences = []
@@ -480,16 +426,6 @@ class SokobanGame:
 				deadlocks.append(f"Corner deadlock at ({x}, {y})")
 			if self.is_wall_deadlock(matrix, box_pos):
 				deadlocks.append(f"Wall deadlock at ({x}, {y})")
-		# FREEZE DEADLOCKS 
-		if self.is_2x2_block_freeze(matrix):
-			pos = self.is_2x2_block_freeze(matrix)
-			if pos:	x, y = pos
-			deadlocks.append(f"Freeze deadlock 2x2 at ({x}, {y})")
-		if self.is_freeze_wall_deadlock(matrix):
-			pos = self.is_freeze_wall_deadlock(matrix)
-			if pos:	length, (x, y) = pos 
-			deadlocks.append(f"Freeze deadlock {length} boxs at ({x}, {y})")
-		
 		return deadlocks
 	
 	# =======================
@@ -646,11 +582,7 @@ class SokobanGame:
 		#chuyển đổi sang MB
 		start_memory = process.memory_info().rss / 1024 / 1024  # MB
 		
-		# TODO: Implement BFS logic here
-		# Hint: Sử dụng queue (deque) để lưu trữ các trạng thái giống hồi học DSA á =))))
-		# Cần track: current_matrix, player_position, path_to_reach_this_state
-
-		# Placeholder implementation
+		# TODO: Implement BFS
 		nodes_explored = 0
 		solution_found = False
 		solution_path = []
@@ -671,7 +603,7 @@ class SokobanGame:
 				solution_path = path
 				break
 			#kiểm tra deadlock
-			deadlock = self.detect_all_deadlocks(current_matrix)
+			deadlock = self.is_deadlock(current_matrix)
 			if not deadlock:                
 				# danh sách các hướng đi khả thi của player
 				valid_move = self.get_valid_moves(current_matrix, current_player_pos) 
@@ -717,7 +649,7 @@ class SokobanGame:
 	# =======================
 	# A* ALGORITHM TEMPLATE
 	# =======================
-	def heuristic(self, matrix, player_pos):
+	def heuristic(self, matrix):
 		"""
 		Hàm heuristic cho A* - Manhattan distance từ các box đến dock gần nhất
 		"""
@@ -746,12 +678,12 @@ class SokobanGame:
 	
 	def solve_astar(self):
 		"""
-		Thuật toán A* để tìm đường đi tối ưu trong Sokoban
+		Thuật toán A*
 		"""
 		print("Start Solver using A*...")
 		start_time = time.time()
 		process = psutil.Process(os.getpid())
-		start_memory = process.memory_info().rss / (1024 * 1024)  # MB
+		start_memory = process.memory_info().rss / 1024 / 1024  # MB
 		
 		# Khởi tạo
 		initial_state = (self.matrix_to_string(self.game_matrix), self.player_pos)
@@ -763,7 +695,7 @@ class SokobanGame:
 		predecessors = {initial_state: None}
 		
 		# Tính f_score cho trạng thái đầu
-		h_score = self.heuristic(self.game_matrix, self.player_pos)
+		h_score = self.heuristic(self.game_matrix)
 		f_score = 0 + h_score
 		
 		# Push start node vào open_list với priority = f_score
@@ -831,7 +763,7 @@ class SokobanGame:
 				new_g_score = current_g + 1  # cost = 1 cho mỗi move
 				
 				# Tính h_score (heuristic)
-				h_score = self.heuristic(succ_matrix, succ_player_pos)
+				h_score = self.heuristic(succ_matrix)
 				
 				# Tính f_score = g + h
 				f_score = new_g_score + h_score
@@ -843,7 +775,7 @@ class SokobanGame:
 						g_scores[succ_state] = new_g_score
 						predecessors[succ_state] = current_state
 						
-						# Add/update vào open_list
+						# Add vào open_list
 						heapq.heappush(open_list, (f_score, new_g_score, succ_matrix, succ_player_pos, succ_path))
 				else:
 					# Successor chưa được explore
