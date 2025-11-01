@@ -683,7 +683,7 @@ class SokobanGame:
 		print("Start Solver using A*...")
 		start_time = time.time()
 		process = psutil.Process(os.getpid())
-		start_memory = process.memory_info().rss / 1024 / 1024  # MB
+		start_memory = process.memory_info().rss / (1024 * 1024)  # MB
 		
 		# Khởi tạo
 		initial_state = (self.matrix_to_string(self.game_matrix), self.player_pos)
